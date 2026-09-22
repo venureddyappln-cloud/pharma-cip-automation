@@ -1,0 +1,13 @@
+# Siemens TIA Portal IDE junk and compilation binaries
+/XFiles/
+/Target/
+/Compile/
+/Logs/
+*.bak
+*.tmp
+*.log
+~*
+
+# System files
+.DS_Store
+Thumbs.db
