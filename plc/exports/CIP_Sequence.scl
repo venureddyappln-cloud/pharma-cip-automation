@@ -1,0 +1,103 @@
+FUNCTION_BLOCK "CIP_Sequence_Controller"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_INPUT
+    Start_Sequence  : Bool;    // Physical panel push button
+    Process_Temp    : Real;    // TE_201 Scaled Input (°C)
+    Conductivity    : Real;    // CE_202 Scaled Input (µS/cm)
+    Tank_Level_High : Bool;    // LS_101 Physical Float Switch
+END_VAR
+
+VAR_OUTPUT
+    Pump_Command    : Bool;    // P_101 Run Contactor
+    Acid_Valve      : Bool;    // V_101 Solenoid
+    Water_Valve     : Bool;    // V_102 Solenoid
+    Sequence_Active : Bool;    // Status indicator
+    Fault_Active    : Bool;    // System Alarm status
+END_VAR
+
+VAR
+    Sequence_Step   : Int := 0; // ISA-88 Step Matrix ID
+    Step_Timer      : TON;      // Siemens IEC standard timer
+    Interlock_OK    : Bool;     // Master loop health check
+END_VAR
+
+BEGIN
+    // =============================================================
+    // HARDWIRED SAFETY INTERLOCK LAYER (Evaluated Every Program Scan)
+    // =============================================================
+    IF #Tank_Level_High THEN
+        #Interlock_OK := FALSE;
+    ELIF (#Sequence_Step = 2) AND (#Process_Temp < 80.0) AND (#Step_Timer.ET > T#60s) THEN
+        // GxP Validation Failure: Temperature dropped below sterilization threshold during chemical run
+        #Interlock_OK := FALSE;
+    ELSE
+        #Interlock_OK := TRUE;
+    END_IF;
+
+    // Emergency Drop to Fail-Safe State if Interlocks Trip
+    IF NOT #Interlock_OK THEN
+        #Pump_Command  := FALSE;
+        #Acid_Valve    := FALSE;
+        #Water_Valve   := FALSE;
+        #Sequence_Step := 99; // Transition immediately to Fault State
+        #Fault_Active  := TRUE;
+    END_IF;
+
+    // =============================================================
+    // SEQUENTIAL BATCH ENGINE MECHANICS (ISA-88 State Machine)
+    // =============================================================
+    CASE #Sequence_Step OF
+
+        0: // IDLE STATE
+            #Sequence_Active := FALSE;
+            #Fault_Active    := FALSE;
+            IF #Start_Sequence AND #Interlock_OK THEN
+                #Sequence_Step := 1;
+            END_IF;
+
+        1: // PRE-RINSE STEP
+            #Sequence_Active := TRUE;
+            #Water_Valve     := TRUE;
+            #Pump_Command    := TRUE;
+
+            #Step_Timer(IN := TRUE, PT := T#300s); // 5-Minute Flush
+            IF #Step_Timer.Q THEN
+                #Step_Timer(IN := FALSE); // Reset Timer
+                #Water_Valve   := FALSE;
+                #Sequence_Step := 2;
+            END_IF;
+
+        2: // HOT CHEMICAL SANITIZATION
+            #Acid_Valve   := TRUE;
+            #Pump_Command := TRUE;
+
+            #Step_Timer(IN := TRUE, PT := T#600s); // 10-Minute Recirculation
+            IF #Step_Timer.Q AND (#Process_Temp >= 80.0) THEN
+                #Step_Timer(IN := FALSE);
+                #Acid_Valve    := FALSE;
+                #Sequence_Step := 3;
+            END_IF;
+
+        3: // FINAL WATER PURITY FLUSH
+            #Water_Valve  := TRUE;
+            #Pump_Command := TRUE;
+
+            // Quality-driven dynamic transition boundary (GAMP 5 target)
+            IF (#Conductivity < 1.5) AND (#Conductivity > 0.0) THEN
+                #Water_Valve   := FALSE;
+                #Pump_Command  := FALSE;
+                #Sequence_Step := 4;
+            END_IF;
+
+        4: // METRICS VALIDATION & COMPLETE
+            #Sequence_Step := 0; // Safely return loop to idle
+
+        99: // FAULT LOCKOUT
+            #Pump_Command := FALSE;
+            #Acid_Valve   := FALSE;
+            #Water_Valve  := FALSE;
+            // Requires an external manual reset command line to clear
+
+    END_CASE;
+END_FUNCTION_BLOCK
