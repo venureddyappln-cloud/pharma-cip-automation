@@ -1,0 +1,7 @@
+Tag Name,Siemens Address,Channel Type,Signal Range,Physical Instrument,Functional Purpose,Critical Validation Limit
+TE_201,IW64,Analog Input (AI),4-20 mA,Siemens SITRANS PT100 RTD,Sanitization Loop Temperature,< 80.0 °C (Low Temp Fault)
+CE_202,IW66,Analog Input (AI),4-20 mA,Toroidal Conductivity Meter,Final Purity Verification,> 1.5 uS/cm (Chemical Carryover)
+LS_101,I0.0,Digital Input (DI),24 VDC,Tuning Fork Level Switch,Recovery Tank Overfill Protection,High (Tank Overflow Risk)
+P_101,Q0.0,Digital Output (DO),24 VDC / Relay,VFD Main Motor Contactor,CIP High-Pressure Feed Pump,Feedback Failure > 3.0s
+V_101,Q0.1,Digital Output (DO),24 VDC / Air,Solenoid Actuated Valve,Acid/Caustic Supply Isolator,Fail-Safe State: Normally Closed
+V_102,Q0.2,Digital Output (DO),24 VDC / Air,Solenoid Actuated Valve,Purified Water Supply Valve,Fail-Safe State: Normally Closed
